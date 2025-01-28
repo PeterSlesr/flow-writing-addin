@@ -6,6 +6,16 @@ Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
         console.log("Word detected, setting up button handlers");
         document.getElementById('toggleFlow').onclick = toggleFlowMode;
+        
+        // Add global key event listeners at the document level
+        document.addEventListener('keydown', handleKeyPress, true);
+        document.addEventListener('keyup', handleKeyPress, true);
+        document.addEventListener('keypress', handleKeyPress, true);
+        
+        // Also add to window level to catch any that bubble up
+        window.addEventListener('keydown', handleKeyPress, true);
+        window.addEventListener('keyup', handleKeyPress, true);
+        window.addEventListener('keypress', handleKeyPress, true);
     }
 });
 
@@ -19,20 +29,10 @@ async function toggleFlowMode() {
         if (isFlowModeActive) {
             // Start aggressive cursor control
             startCursorControl();
-            
-            // Add key event listener
-            document.addEventListener('keydown', handleKeyPress, true);
-            
-            // Update status
             updateStatus(true);
         } else {
             // Stop cursor control
             stopCursorControl();
-            
-            // Remove key event listener
-            document.removeEventListener('keydown', handleKeyPress, true);
-            
-            // Update status
             updateStatus(false);
         }
     } catch (error) {
@@ -69,13 +69,12 @@ function startCursorControl() {
                 });
             } catch (error) {
                 console.error("Error in cursor control:", error);
-                // If we get an error, assume we lost control and disable flow mode
                 isFlowModeActive = false;
                 stopCursorControl();
                 updateStatus(false);
             }
         }
-    }, 50); // Check every 50ms - very aggressive
+    }, 50);
 }
 
 function stopCursorControl() {
@@ -85,51 +84,56 @@ function stopCursorControl() {
     }
 }
 
-// Handle key events
-async function handleKeyPress(e) {
+// Handle ALL key events
+function handleKeyPress(e) {
     if (!isFlowModeActive) return;
+
+    // List of keys to always block in flow mode
+    const blockedKeys = [
+        'Backspace',
+        'Delete',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'ArrowDown',
+        'Home',
+        'End',
+        'PageUp',
+        'PageDown'
+    ];
     
-    console.log("Key pressed:", e.key);
-    
-    // Prevent navigation keys
-    if (e.key === 'Backspace' || 
-        e.key === 'Delete' || 
-        e.key === 'ArrowLeft' || 
-        e.key === 'ArrowRight' ||
-        e.key === 'Home' ||
-        e.key === 'End') {
-        console.log("Blocking navigation key");
+    // If it's a blocked key, prevent it completely
+    if (blockedKeys.includes(e.key)) {
+        console.log("Blocking navigation key:", e.key);
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         return false;
     }
     
-    // Handle regular typing
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // For regular typing, only handle on keydown
+    if (e.type === 'keydown' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         console.log("Processing character:", e.key);
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         
-        try {
-            await Word.run(async (context) => {
+        // Insert the character at the end
+        Word.run(async (context) => {
+            try {
                 const body = context.document.body;
-                
-                // Always insert at the end
                 body.insertText(e.key, Word.InsertLocation.end);
-                
-                // Force selection to end
                 const range = body.getRange('End');
                 range.select();
-                
                 await context.sync();
-            });
-        } catch (error) {
-            console.error("Error in handleKeyPress:", error);
-            // If we get an error, disable flow mode
-            isFlowModeActive = false;
-            stopCursorControl();
-            updateStatus(false);
-        }
+            } catch (error) {
+                console.error("Error in handleKeyPress:", error);
+                isFlowModeActive = false;
+                stopCursorControl();
+                updateStatus(false);
+            }
+        });
+        
         return false;
     }
 }
