@@ -1,5 +1,5 @@
 let isFlowModeActive = false;
-let selectionInterval = null;
+let cursorInterval = null;
 
 Office.onReady((info) => {
     console.log("Office.onReady called", info);
@@ -17,11 +17,8 @@ async function toggleFlowMode() {
         console.log("Flow mode is now:", isFlowModeActive);
         
         if (isFlowModeActive) {
-            // Move cursor to end initially
-            await moveToEnd();
-            
-            // Start monitoring selection
-            startSelectionMonitoring();
+            // Start aggressive cursor control
+            startCursorControl();
             
             // Add key event listener
             document.addEventListener('keydown', handleKeyPress, true);
@@ -29,8 +26,8 @@ async function toggleFlowMode() {
             // Update status
             updateStatus(true);
         } else {
-            // Stop monitoring selection
-            stopSelectionMonitoring();
+            // Stop cursor control
+            stopCursorControl();
             
             // Remove key event listener
             document.removeEventListener('keydown', handleKeyPress, true);
@@ -40,6 +37,8 @@ async function toggleFlowMode() {
         }
     } catch (error) {
         console.error("Error in toggleFlowMode:", error);
+        isFlowModeActive = false;
+        updateStatus(false);
     }
 }
 
@@ -51,53 +50,38 @@ function updateStatus(active) {
     }
 }
 
-// Start monitoring selection changes
-function startSelectionMonitoring() {
-    if (selectionInterval) {
-        clearInterval(selectionInterval);
+// Aggressively control cursor position
+function startCursorControl() {
+    if (cursorInterval) {
+        clearInterval(cursorInterval);
     }
     
-    selectionInterval = setInterval(async () => {
+    // Check and correct cursor position very frequently
+    cursorInterval = setInterval(async () => {
         if (isFlowModeActive) {
-            await Word.run(async (context) => {
-                const doc = context.document;
-                const selection = doc.getSelection();
-                const body = doc.body;
-                
-                selection.load('start');
-                body.load('text');
-                await context.sync();
-                
-                // If selection is not at the end, move it there
-                if (selection.start < body.text.length) {
-                    const range = body.getRange('End');
+            try {
+                await Word.run(async (context) => {
+                    const document = context.document;
+                    // Force selection to end
+                    const range = document.body.getRange('End');
                     range.select();
                     await context.sync();
-                }
-            });
+                });
+            } catch (error) {
+                console.error("Error in cursor control:", error);
+                // If we get an error, assume we lost control and disable flow mode
+                isFlowModeActive = false;
+                stopCursorControl();
+                updateStatus(false);
+            }
         }
-    }, 100); // Check every 100ms
+    }, 50); // Check every 50ms - very aggressive
 }
 
-// Stop monitoring selection changes
-function stopSelectionMonitoring() {
-    if (selectionInterval) {
-        clearInterval(selectionInterval);
-        selectionInterval = null;
-    }
-}
-
-// Move cursor to end of document
-async function moveToEnd() {
-    try {
-        await Word.run(async (context) => {
-            const body = context.document.body;
-            const range = body.getRange('End');
-            range.select();
-            await context.sync();
-        });
-    } catch (error) {
-        console.error("Error moving to end:", error);
+function stopCursorControl() {
+    if (cursorInterval) {
+        clearInterval(cursorInterval);
+        cursorInterval = null;
     }
 }
 
@@ -133,7 +117,7 @@ async function handleKeyPress(e) {
                 // Always insert at the end
                 body.insertText(e.key, Word.InsertLocation.end);
                 
-                // Move selection to end
+                // Force selection to end
                 const range = body.getRange('End');
                 range.select();
                 
@@ -141,6 +125,10 @@ async function handleKeyPress(e) {
             });
         } catch (error) {
             console.error("Error in handleKeyPress:", error);
+            // If we get an error, disable flow mode
+            isFlowModeActive = false;
+            stopCursorControl();
+            updateStatus(false);
         }
         return false;
     }
