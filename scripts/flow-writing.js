@@ -6,62 +6,8 @@ Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
         console.log("Word detected, setting up button handlers");
         document.getElementById('toggleFlow').onclick = toggleFlowMode;
-        
-        // Set up Word document event handlers
-        setupWordHandlers();
     }
 });
-
-async function setupWordHandlers() {
-    try {
-        await Word.run(async (context) => {
-            // Handle document events
-            context.document.onContentControlEntered.add(handleWordKeyEvent);
-            context.document.onSelectionChanged.add(handleSelectionChange);
-            
-            // Bind to the document body
-            const body = context.document.body;
-            body.onKeyDown.add(handleWordKeyEvent);
-            
-            await context.sync();
-        });
-    } catch (error) {
-        console.error("Error setting up Word handlers:", error);
-    }
-}
-
-async function handleWordKeyEvent(event) {
-    if (!isFlowModeActive) return;
-    
-    console.log("Word key event:", event);
-    
-    // Block navigation keys
-    try {
-        await Word.run(async (context) => {
-            // Move cursor to end
-            const range = context.document.body.getRange('End');
-            range.select();
-            await context.sync();
-        });
-    } catch (error) {
-        console.error("Error in handleWordKeyEvent:", error);
-    }
-}
-
-async function handleSelectionChange(event) {
-    if (!isFlowModeActive) return;
-    
-    try {
-        await Word.run(async (context) => {
-            // Force cursor to end
-            const range = context.document.body.getRange('End');
-            range.select();
-            await context.sync();
-        });
-    } catch (error) {
-        console.error("Error in handleSelectionChange:", error);
-    }
-}
 
 // Main toggle for flow mode
 async function toggleFlowMode() {
@@ -72,26 +18,38 @@ async function toggleFlowMode() {
         
         if (isFlowModeActive) {
             await Word.run(async (context) => {
-                // Set document to read-only when flow mode is on
-                context.document.body.style.readOnly = true;
+                // Protect the document
+                const doc = context.document;
+                doc.protection.set({
+                    type: 'readOnly',
+                    exceptions: ['everyone']
+                });
                 
-                // But allow insertions at the end
-                const range = context.document.body.getRange('End');
+                // Move to end and set up for typing
+                const range = doc.body.getRange('End');
                 range.select();
-                range.style.readOnly = false;
                 
                 await context.sync();
             });
             
             // Start cursor control
             startCursorControl();
+            
+            // Add key handlers
+            document.addEventListener('keydown', handleKeyPress, true);
+            window.addEventListener('keydown', handleKeyPress, true);
+            
             updateStatus(true);
         } else {
             await Word.run(async (context) => {
-                // Remove read-only when flow mode is off
-                context.document.body.style.readOnly = false;
+                // Remove protection
+                context.document.protection.unset();
                 await context.sync();
             });
+            
+            // Remove handlers
+            document.removeEventListener('keydown', handleKeyPress, true);
+            window.removeEventListener('keydown', handleKeyPress, true);
             
             stopCursorControl();
             updateStatus(false);
@@ -111,6 +69,57 @@ function updateStatus(active) {
     }
 }
 
+// Handle key events
+async function handleKeyPress(e) {
+    if (!isFlowModeActive) return;
+
+    // Block these keys completely
+    const blockedKeys = [
+        'Backspace', 'Delete', 
+        'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+        'Home', 'End', 'PageUp', 'PageDown'
+    ];
+    
+    if (blockedKeys.includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+    
+    // Handle typing
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        try {
+            await Word.run(async (context) => {
+                const doc = context.document;
+                
+                // Temporarily unprotect
+                doc.protection.unset();
+                await context.sync();
+                
+                // Insert text at end
+                const body = doc.body;
+                body.insertText(e.key, Word.InsertLocation.end);
+                
+                // Move cursor to end
+                const range = body.getRange('End');
+                range.select();
+                
+                // Reprotect
+                doc.protection.set({
+                    type: 'readOnly',
+                    exceptions: ['everyone']
+                });
+                
+                await context.sync();
+            });
+        } catch (error) {
+            console.error("Error typing:", error);
+        }
+        return false;
+    }
+}
+
 // Aggressively control cursor position
 function startCursorControl() {
     if (cursorInterval) {
@@ -121,11 +130,8 @@ function startCursorControl() {
         if (isFlowModeActive) {
             try {
                 await Word.run(async (context) => {
-                    // Keep document in read-only mode except for end
-                    context.document.body.style.readOnly = true;
                     const range = context.document.body.getRange('End');
                     range.select();
-                    range.style.readOnly = false;
                     await context.sync();
                 });
             } catch (error) {
