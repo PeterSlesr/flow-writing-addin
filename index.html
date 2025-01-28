@@ -4,21 +4,47 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
     <title>Flow Writing Add-in</title>
-    
+
     <!-- Office JavaScript API -->
     <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
     
-    <!-- Add-in CSS -->
-    <link rel="stylesheet" type="text/css" href="assets/styles.css" />
-    
     <!-- Add-in JavaScript -->
     <script type="text/javascript" src="scripts/flow-writing.js"></script>
+
+    <style>
+        .ms-Button {
+            background-color: #217346;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .active {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .inactive {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+    </style>
 </head>
+
 <body>
     <div id="content-main">
         <div class="padding">
             <button class="ms-Button" id="toggleFlow">Toggle Flow Mode</button>
-            <button class="ms-Button" id="toggleVisibility">Toggle Text Visibility</button>
             <div id="status" class="inactive">Flow Mode: OFF</div>
         </div>
     </div>
