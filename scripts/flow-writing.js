@@ -1,5 +1,5 @@
 let isFlowModeActive = false;
-let cursorInterval = null;
+let flowControl = null;
 
 Office.onReady((info) => {
     console.log("Office.onReady called", info);
@@ -9,51 +9,63 @@ Office.onReady((info) => {
     }
 });
 
-// Main toggle for flow mode
 async function toggleFlowMode() {
     console.log("toggleFlowMode called");
     try {
         isFlowModeActive = !isFlowModeActive;
         console.log("Flow mode is now:", isFlowModeActive);
         
-        if (isFlowModeActive) {
-            await Word.run(async (context) => {
-                // Protect the document
-                const doc = context.document;
-                doc.protection.set({
-                    type: 'readOnly',
-                    exceptions: ['everyone']
-                });
+        await Word.run(async (context) => {
+            const doc = context.document;
+            
+            if (isFlowModeActive) {
+                // Store current content
+                const body = doc.body;
+                body.load("text");
+                await context.sync();
+                const currentText = body.text;
                 
-                // Move to end and set up for typing
-                const range = doc.body.getRange('End');
+                // Clear the document
+                body.clear();
+                await context.sync();
+                
+                // Create two content controls
+                // One for existing text (locked)
+                const existingTextControl = body.insertContentControl();
+                existingTextControl.insertText(currentText, Word.InsertLocation.start);
+                existingTextControl.cannotDelete = true;
+                existingTextControl.cannotEdit = true;
+                existingTextControl.appearance = "Hidden";  // Hide the boundaries
+                
+                // One for new text (editable only at end)
+                flowControl = body.insertContentControl();
+                flowControl.cannotDelete = true;
+                flowControl.appearance = "Hidden";
+                
+                // Move cursor to end
+                const range = body.getRange('End');
                 range.select();
                 
                 await context.sync();
-            });
-            
-            // Start cursor control
-            startCursorControl();
-            
-            // Add key handlers
-            document.addEventListener('keydown', handleKeyPress, true);
-            window.addEventListener('keydown', handleKeyPress, true);
-            
-            updateStatus(true);
-        } else {
-            await Word.run(async (context) => {
-                // Remove protection
-                context.document.protection.unset();
+                
+                updateStatus(true);
+            } else {
+                // Combine content and remove controls
+                const body = doc.body;
+                body.load("text");
                 await context.sync();
-            });
-            
-            // Remove handlers
-            document.removeEventListener('keydown', handleKeyPress, true);
-            window.removeEventListener('keydown', handleKeyPress, true);
-            
-            stopCursorControl();
-            updateStatus(false);
-        }
+                
+                const text = body.text;
+                body.clear();
+                body.insertText(text, Word.InsertLocation.start);
+                
+                flowControl = null;
+                
+                await context.sync();
+                
+                updateStatus(false);
+            }
+        });
     } catch (error) {
         console.error("Error in toggleFlowMode:", error);
         isFlowModeActive = false;
@@ -66,87 +78,5 @@ function updateStatus(active) {
     if (statusDiv) {
         statusDiv.textContent = active ? 'Flow Mode: ON' : 'Flow Mode: OFF';
         statusDiv.className = active ? 'active' : 'inactive';
-    }
-}
-
-// Handle key events
-async function handleKeyPress(e) {
-    if (!isFlowModeActive) return;
-
-    // Block these keys completely
-    const blockedKeys = [
-        'Backspace', 'Delete', 
-        'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
-        'Home', 'End', 'PageUp', 'PageDown'
-    ];
-    
-    if (blockedKeys.includes(e.key)) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-    }
-    
-    // Handle typing
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        e.preventDefault();
-        try {
-            await Word.run(async (context) => {
-                const doc = context.document;
-                
-                // Temporarily unprotect
-                doc.protection.unset();
-                await context.sync();
-                
-                // Insert text at end
-                const body = doc.body;
-                body.insertText(e.key, Word.InsertLocation.end);
-                
-                // Move cursor to end
-                const range = body.getRange('End');
-                range.select();
-                
-                // Reprotect
-                doc.protection.set({
-                    type: 'readOnly',
-                    exceptions: ['everyone']
-                });
-                
-                await context.sync();
-            });
-        } catch (error) {
-            console.error("Error typing:", error);
-        }
-        return false;
-    }
-}
-
-// Aggressively control cursor position
-function startCursorControl() {
-    if (cursorInterval) {
-        clearInterval(cursorInterval);
-    }
-    
-    cursorInterval = setInterval(async () => {
-        if (isFlowModeActive) {
-            try {
-                await Word.run(async (context) => {
-                    const range = context.document.body.getRange('End');
-                    range.select();
-                    await context.sync();
-                });
-            } catch (error) {
-                console.error("Error in cursor control:", error);
-                isFlowModeActive = false;
-                stopCursorControl();
-                updateStatus(false);
-            }
-        }
-    }, 50);
-}
-
-function stopCursorControl() {
-    if (cursorInterval) {
-        clearInterval(cursorInterval);
-        cursorInterval = null;
     }
 }
