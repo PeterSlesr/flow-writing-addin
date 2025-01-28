@@ -1,0 +1,38 @@
+.ms-Button {
+    background-color: #217346;
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 4px 2px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.ms-Button:hover {
+    background-color: #1a5c38;
+}
+
+.ms-Button.disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+#status {
+    margin-top: 20px;
+    padding: 10px;
+    border-radius: 4px;
+}
+
+.active {
+    background-color: #dff0d8;
+    color: #3c763d;
+}
+
+.inactive {
+    background-color: #f2dede;
+    color: #a94442;
+}
