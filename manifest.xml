@@ -9,9 +9,9 @@
     <DefaultLocale>en-US</DefaultLocale>
     <DisplayName DefaultValue="Flow Writing Mode" />
     <Description DefaultValue="A plugin that enables distraction-free, forward-only writing." />
-    <IconUrl DefaultValue="https://[YOUR-USERNAME].github.io/flow-writing-addin/assets/icon-32.png" />
-    <HighResolutionIconUrl DefaultValue="https://[YOUR-USERNAME].github.io/flow-writing-addin/assets/icon-64.png" />
-    <SupportUrl DefaultValue="https://[YOUR-USERNAME].github.io/flow-writing-addin" />
+    <IconUrl DefaultValue="https://PeterSlesr.github.io/flow-writing-addin/assets/icon-32.png" />
+    <HighResolutionIconUrl DefaultValue="https://PeterSlesr.github.io/flow-writing-addin/assets/icon-64.png" />
+    <SupportUrl DefaultValue="https://PeterSlesr.github.io/flow-writing-addin" />
     <Hosts>
         <Host Name="Document" />
     </Hosts>
