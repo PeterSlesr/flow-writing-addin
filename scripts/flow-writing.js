@@ -1,4 +1,5 @@
 let isFlowModeActive = false;
+let selectionInterval = null;
 
 Office.onReady((info) => {
     console.log("Office.onReady called", info);
@@ -19,32 +20,70 @@ async function toggleFlowMode() {
             // Move cursor to end initially
             await moveToEnd();
             
-            // Add event listeners
+            // Start monitoring selection
+            startSelectionMonitoring();
+            
+            // Add key event listener
             document.addEventListener('keydown', handleKeyPress, true);
-            document.addEventListener('selectionchange', handleSelectionChange, true);
-            document.addEventListener('click', handleClick, true);
             
             // Update status
-            const statusDiv = document.getElementById('status');
-            if (statusDiv) {
-                statusDiv.textContent = 'Flow Mode: ON';
-                statusDiv.className = 'active';
-            }
+            updateStatus(true);
         } else {
-            // Remove event listeners
+            // Stop monitoring selection
+            stopSelectionMonitoring();
+            
+            // Remove key event listener
             document.removeEventListener('keydown', handleKeyPress, true);
-            document.removeEventListener('selectionchange', handleSelectionChange, true);
-            document.removeEventListener('click', handleClick, true);
             
             // Update status
-            const statusDiv = document.getElementById('status');
-            if (statusDiv) {
-                statusDiv.textContent = 'Flow Mode: OFF';
-                statusDiv.className = 'inactive';
-            }
+            updateStatus(false);
         }
     } catch (error) {
         console.error("Error in toggleFlowMode:", error);
+    }
+}
+
+function updateStatus(active) {
+    const statusDiv = document.getElementById('status');
+    if (statusDiv) {
+        statusDiv.textContent = active ? 'Flow Mode: ON' : 'Flow Mode: OFF';
+        statusDiv.className = active ? 'active' : 'inactive';
+    }
+}
+
+// Start monitoring selection changes
+function startSelectionMonitoring() {
+    if (selectionInterval) {
+        clearInterval(selectionInterval);
+    }
+    
+    selectionInterval = setInterval(async () => {
+        if (isFlowModeActive) {
+            await Word.run(async (context) => {
+                const doc = context.document;
+                const selection = doc.getSelection();
+                const body = doc.body;
+                
+                selection.load('start');
+                body.load('text');
+                await context.sync();
+                
+                // If selection is not at the end, move it there
+                if (selection.start < body.text.length) {
+                    const range = body.getRange('End');
+                    range.select();
+                    await context.sync();
+                }
+            });
+        }
+    }, 100); // Check every 100ms
+}
+
+// Stop monitoring selection changes
+function stopSelectionMonitoring() {
+    if (selectionInterval) {
+        clearInterval(selectionInterval);
+        selectionInterval = null;
     }
 }
 
@@ -60,25 +99,6 @@ async function moveToEnd() {
     } catch (error) {
         console.error("Error moving to end:", error);
     }
-}
-
-// Handle clicks
-function handleClick(e) {
-    if (!isFlowModeActive) return;
-    
-    // Prevent click from repositioning cursor
-    e.preventDefault();
-    e.stopPropagation();
-    moveToEnd();
-    return false;
-}
-
-// Handle selection changes
-function handleSelectionChange(e) {
-    if (!isFlowModeActive) return;
-    
-    // Move back to end when selection changes
-    moveToEnd();
 }
 
 // Handle key events
@@ -101,7 +121,7 @@ async function handleKeyPress(e) {
     }
     
     // Handle regular typing
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { // Single character keys without modifiers
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         console.log("Processing character:", e.key);
         e.preventDefault();
         e.stopPropagation();
