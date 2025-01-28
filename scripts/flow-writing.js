@@ -8,8 +8,24 @@ Office.onReady((info) => {
         console.log("Word detected, setting up button handlers");
         document.getElementById('toggleFlow').onclick = toggleFlowMode;
         document.getElementById('toggleVisibility').onclick = toggleTextVisibility;
+        
+        // Add event listener to Word document
+        setupWordEventHandlers();
     }
 });
+
+async function setupWordEventHandlers() {
+    try {
+        await Word.run(async (context) => {
+            // Handle document changes
+            context.document.onContentControlAdded.add(handleDocumentChange);
+            context.document.onSelectionChanged.add(handleSelectionChange);
+            await context.sync();
+        });
+    } catch (error) {
+        console.error("Error setting up Word handlers:", error);
+    }
+}
 
 // Main toggle for flow mode
 async function toggleFlowMode() {
@@ -27,10 +43,16 @@ async function toggleFlowMode() {
                 await context.sync();
                 originalContent = body.text;
                 console.log("Original content stored");
+                
+                // Move cursor to end
+                const range = body.getRange('End');
+                range.select();
+                await context.sync();
             });
             
-            // Add key event listeners
-            document.addEventListener('keydown', handleKeyPress);
+            // Add key event listeners at both document and window level
+            document.addEventListener('keydown', handleKeyPress, true);
+            window.addEventListener('keydown', handleKeyPress, true);
             
             // Update status
             const statusDiv = document.getElementById('status');
@@ -40,7 +62,8 @@ async function toggleFlowMode() {
             }
         } else {
             // Remove event listeners
-            document.removeEventListener('keydown', handleKeyPress);
+            document.removeEventListener('keydown', handleKeyPress, true);
+            window.removeEventListener('keydown', handleKeyPress, true);
             
             // Reset visibility if needed
             if (isTextHidden) {
@@ -69,13 +92,15 @@ async function handleKeyPress(e) {
     if (e.key === 'Backspace' || e.key === 'Delete') {
         console.log("Blocking delete/backspace");
         e.preventDefault();
-        return;
+        e.stopPropagation();
+        return false;
     }
     
     // Handle regular typing
     if (e.key.length === 1) { // Single character keys
         console.log("Processing character:", e.key);
         e.preventDefault();
+        e.stopPropagation();
         
         try {
             await Word.run(async (context) => {
@@ -84,11 +109,15 @@ async function handleKeyPress(e) {
                 // Always insert at the end
                 body.insertText(e.key, Word.InsertLocation.end);
                 
+                // Move selection to end
+                const range = body.getRange('End');
+                range.select();
+                
                 // If hiding previous text is active
                 if (isTextHidden) {
                     // Make all text white except last character
-                    const range = body.getRange();
-                    range.font.color = 'white';
+                    const fullRange = body.getRange();
+                    fullRange.font.color = 'white';
                     
                     const lastChar = body.getRange(body.length - 1, body.length);
                     lastChar.font.color = 'black';
@@ -99,6 +128,39 @@ async function handleKeyPress(e) {
         } catch (error) {
             console.error("Error in handleKeyPress:", error);
         }
+        return false;
+    }
+}
+
+// Handle any document changes
+async function handleDocumentChange(eventArgs) {
+    if (!isFlowModeActive) return;
+    
+    try {
+        await Word.run(async (context) => {
+            const body = context.document.body;
+            const range = body.getRange('End');
+            range.select();
+            await context.sync();
+        });
+    } catch (error) {
+        console.error("Error handling document change:", error);
+    }
+}
+
+// Handle selection changes
+async function handleSelectionChange(eventArgs) {
+    if (!isFlowModeActive) return;
+    
+    try {
+        await Word.run(async (context) => {
+            const body = context.document.body;
+            const range = body.getRange('End');
+            range.select();
+            await context.sync();
+        });
+    } catch (error) {
+        console.error("Error handling selection change:", error);
     }
 }
 
