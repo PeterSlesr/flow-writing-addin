@@ -13,59 +13,48 @@ async function toggleFlowMode() {
     console.log("toggleFlowMode called");
     try {
         isFlowModeActive = !isFlowModeActive;
-        console.log("Flow mode is now:", isFlowModeActive);
+        console.log("Flow mode switched to:", isFlowModeActive);
         
-        await Word.run(async (context) => {
-            const doc = context.document;
-            
-            if (isFlowModeActive) {
-                // Store current content
+        if (isFlowModeActive) {
+            await Word.run(async (context) => {
+                const doc = context.document;
                 const body = doc.body;
+                
+                // Load current content
                 body.load("text");
                 await context.sync();
                 const currentText = body.text;
                 
-                // Clear the document
-                body.clear();
+                // Create a content control
+                const contentControl = body.insertContentControl();
+                contentControl.insertText(currentText, Word.InsertLocation.start);
+                
                 await context.sync();
                 
-                // Create two content controls
-                // One for existing text (locked)
-                const existingTextControl = body.insertContentControl();
-                existingTextControl.insertText(currentText, Word.InsertLocation.start);
-                existingTextControl.cannotDelete = true;
-                existingTextControl.cannotEdit = true;
-                existingTextControl.appearance = "Hidden";  // Hide the boundaries
-                
-                // One for new text (editable only at end)
-                flowControl = body.insertContentControl();
-                flowControl.cannotDelete = true;
-                flowControl.appearance = "Hidden";
-                
-                // Move cursor to end
+                // Move to end
                 const range = body.getRange('End');
                 range.select();
                 
                 await context.sync();
+            });
+            updateStatus(true);
+        } else {
+            await Word.run(async (context) => {
+                const body = context.document.body;
                 
-                updateStatus(true);
-            } else {
-                // Combine content and remove controls
-                const body = doc.body;
-                body.load("text");
+                // Just remove any content controls
+                const contentControls = body.contentControls;
+                contentControls.load("items");
                 await context.sync();
                 
-                const text = body.text;
-                body.clear();
-                body.insertText(text, Word.InsertLocation.start);
-                
-                flowControl = null;
+                contentControls.items.forEach((control) => {
+                    control.delete(false); // false = preserve content
+                });
                 
                 await context.sync();
-                
-                updateStatus(false);
-            }
-        });
+            });
+            updateStatus(false);
+        }
     } catch (error) {
         console.error("Error in toggleFlowMode:", error);
         isFlowModeActive = false;
