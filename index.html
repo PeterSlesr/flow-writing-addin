@@ -1,52 +1,70 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-    <title>Flow Writing Add-in</title>
+let isFlowModeActive = false;
 
-    <!-- Office JavaScript API -->
-    <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+Office.onReady((info) => {
+    console.log("Office.onReady called", info);
+    if (info.host === Office.HostType.Word) {
+        console.log("Word detected, setting up button handlers");
+        document.getElementById('toggleFlow').onclick = toggleFlowMode;
+    }
+});
+
+async function toggleFlowMode() {
+    console.log("toggleFlowMode called");
+    try {
+        isFlowModeActive = !isFlowModeActive;
+        console.log("Flow mode switched to:", isFlowModeActive);
+        
+        if (isFlowModeActive) {
+            await Word.run(async (context) => {
+                // Move cursor to end of document
+                const body = context.document.body;
+                const range = body.getRange('End');
+                range.select();
+                await context.sync();
+                
+                // Use Word's ribbon commands to enter immersive reader mode
+                await Office.addin.executeCommand('ReadImmersiveReader');
+                // Set focus mode and line focus
+                await Office.addin.executeCommand('FocusModeToggle');
+                await Office.addin.executeCommand('LineFocusToggle');
+                
+                // Key event listener for blocking backspace/delete
+                document.addEventListener('keydown', handleKeyPress, true);
+            });
+            updateStatus(true);
+        } else {
+            // Remove key event listener
+            document.removeEventListener('keydown', handleKeyPress, true);
+            
+            // Exit immersive reader mode
+            await Office.addin.executeCommand('ReadExit');
+            
+            updateStatus(false);
+        }
+    } catch (error) {
+        console.error("Error in toggleFlowMode:", error);
+        isFlowModeActive = false;
+        updateStatus(false);
+    }
+}
+
+// Handle key events (just for backspace/delete)
+function handleKeyPress(e) {
+    if (!isFlowModeActive) return;
     
-    <!-- Add-in JavaScript -->
-    <script type="text/javascript" src="scripts/flow-writing.js"></script>
+    // Prevent backspace and delete
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+        console.log("Blocking delete/backspace");
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    }
+}
 
-    <style>
-        .ms-Button {
-            background-color: #217346;
-            border: none;
-            color: white;
-            padding: 10px 20px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        #status {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .active {
-            background-color: #dff0d8;
-            color: #3c763d;
-        }
-        .inactive {
-            background-color: #f2dede;
-            color: #a94442;
-        }
-    </style>
-</head>
-
-<body>
-    <div id="content-main">
-        <div class="padding">
-            <button class="ms-Button" id="toggleFlow">Toggle Flow Mode</button>
-            <div id="status" class="inactive">Flow Mode: OFF</div>
-        </div>
-    </div>
-</body>
-</html>
+function updateStatus(active) {
+    const statusDiv = document.getElementById('status');
+    if (statusDiv) {
+        statusDiv.textContent = active ? 'Flow Mode: ON' : 'Flow Mode: OFF';
+        statusDiv.className = active ? 'active' : 'inactive';
+    }
+}
